@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  db:
+    image: pgvector/pgvector:16-1.1.1
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: voice_ai_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+volumes:
+  postgres_data:
