@@ -1,8 +1,12 @@
 import asyncio
 import logging
 import os
+import sys
 import traceback
 from dotenv import load_dotenv
+
+# Add the 'backend' directory to sys.path so 'app' module can be found in subprocesses
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from livekit.agents import AutoSubscribe, JobContext, JobRequest, WorkerOptions, cli, llm
 from livekit.agents.voice import Agent, AgentSession
@@ -33,14 +37,24 @@ async def entrypoint(ctx: JobContext):
         if not eleven_api_key:
             logger.error("Missing ELEVEN_API_KEY")
 
+        from app.services.ehr_tools import EHRTools
+        ehr_tools = EHRTools()
+
         # Create the Agent using ElevenLabs for both STT and TTS, and Claude for LLM
         agent = Agent(
             instructions=(
-                "You are a helpful and empathetic hospital front desk assistant. "
-                "Your job is to answer incoming calls, understand the patient's needs, "
-                "provide information, help them book or reschedule appointments, and escalate "
-                "to human staff if there is an emergency or high distress. Keep responses brief and conversational."
+                "You are an empathetic, efficient, and professional hospital front desk receptionist. "
+                "Your job is to answer incoming calls, understand the patient's requests, and use your tools to help them. "
+                "\n\nCORE WORKFLOW:\n"
+                "1. If the user wants to book, reschedule, or check an appointment, FIRST ask for their phone number to look up their Patient ID using get_patient_by_phone.\n"
+                "2. If they want to book an appointment with a specific specialty, use find_available_doctors to find a Provider ID.\n"
+                "3. Use the book_appointment or check_appointments tools using the precise IDs you gathered.\n"
+                "\n\nRULES:\n"
+                "- Keep responses conversational, brief, and spoken naturally (e.g., say 'Dr. Smith' instead of 'Doctor 1').\n"
+                "- Never expose raw database IDs to the user; use their real names.\n"
+                "- If the user expresses a life-threatening medical emergency or extreme distress, immediately instruct them to call 911 or go to the nearest emergency room, and state that you are escalating the call to a human."
             ),
+            tools=llm.find_function_tools(ehr_tools),
             vad=silero.VAD.load(),
             stt=elevenlabs.STT(
                 api_key=eleven_api_key,

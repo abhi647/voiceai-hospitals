@@ -14,9 +14,9 @@ def get_voice_token(request: TokenRequest):
     Generate a secure token for the Next.js frontend to connect 
     to the LiveKit room and talk to the Voice Agent.
     """
-    # Use a dynamic room name so every connection gets a fresh room and triggers a new agent dispatch
+    # Use a dynamic room name starting with 'call-' so it triggers the SAME dispatch rule as SIP phone calls
     import uuid
-    room_name = f"hospital-reception-{uuid.uuid4().hex[:8]}" 
+    room_name = f"call-web-{uuid.uuid4().hex[:8]}" 
     
     try:
         token = create_participant_token(room_name, request.participant_name)
