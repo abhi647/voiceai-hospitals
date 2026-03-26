@@ -23,7 +23,7 @@ export default function VoiceAssistant() {
     try {
       const participantName = `patient-${Math.floor(Math.random() * 10000)}`;
       
-      const response = await fetch("http://localhost:8001/voice/token", {
+      const response = await fetch("http://127.0.0.1:8000/voice/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ participant_name: participantName }),
@@ -37,7 +37,7 @@ export default function VoiceAssistant() {
       console.log("Token received:", data.token?.substring(0, 20) + "...");
       console.log("Room:", data.room_name);
       setToken(data.token);
-      setServerUrl(process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://seven-billion-k0vzby9z.livekit.cloud");
+      setServerUrl(process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://hospital-voice-ai-d76a5vz4.livekit.cloud");
       
     } catch (err: any) {
       console.error("Failed to connect", err);
@@ -68,7 +68,7 @@ export default function VoiceAssistant() {
           token={token}
           serverUrl={serverUrl}
           connect={true}
-          audio={true}
+          audio={false}
           video={false}
           onDisconnected={() => console.log("LiveKit disconnected")}
           onError={(e) => {

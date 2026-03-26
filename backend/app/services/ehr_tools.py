@@ -3,13 +3,14 @@ import logging
 from datetime import datetime
 from livekit.agents import llm
 from app.db.database import SessionLocal
-from app.db.models import Patient, Provider, Appointment
+from app.db.models import Patient, Provider, Appointment, FAQ, CallSession
 
 logger = logging.getLogger("ehr-tools")
 
 class EHRTools(llm.ToolContext):
-    def __init__(self):
+    def __init__(self, session_id: int = None):
         super().__init__([])
+        self.session_id = session_id
 
     @llm.function_tool(description="Look up a patient by their phone number. Use this first when answering a call.")
     async def get_patient_by_phone(self, phone_number: str) -> str:
@@ -73,4 +74,56 @@ class EHRTools(llm.ToolContext):
                 if not apps:
                     return "No appointments found for this patient."
                 return "\n".join([f"Appointment ID: {a.id}, Date/Time: {a.appointment_time}, Reason: {a.reason}, Status: {a.status}, Doctor ID: {a.provider_id}" for a in apps])
+        return await asyncio.to_thread(_query)
+
+    @llm.function_tool(description="Search the hospital knowledge base for FAQs (visiting hours, parking, locations, emergency room info).")
+    async def search_faq(self, query: str) -> str:
+        logger.info(f"Tool call: search_faq({query})")
+        def _query():
+            with SessionLocal() as db:
+                # Simple keyword search for SQLite fallback
+                faqs = db.query(FAQ).filter(
+                    (FAQ.question.ilike(f"%{query}%")) | (FAQ.answer.ilike(f"%{query}%"))
+                ).all()
+                if not faqs:
+                    return "No specific information found in the knowledge base. Please ask for more details or escalate if it sounds serious."
+                return "\n---\n".join([f"Q: {f.question}\nA: {f.answer}" for f in faqs])
+        return await asyncio.to_thread(_query)
+
+    @llm.function_tool(description="Escalate the call to a human operator. Use this if the patient is in distress, has a life-threatening emergency, or expresses extreme dissatisfaction.")
+    async def escalate_to_human(self, reason: str) -> str:
+        logger.info(f"Tool call: escalate_to_human(reason='{reason}')")
+        def _update():
+            if not self.session_id:
+                return "Escalation requested, but no active session found to mark. Telling the user an operator is being notified."
+            with SessionLocal() as db:
+                session = db.query(CallSession).filter(CallSession.id == self.session_id).first()
+                if session:
+                    session.status = "escalated"
+                    session.urgency_score = 10
+                    db.commit()
+                    return "The call has been flagged as 'Escalated' in the system. A human operator has been notified."
+                return "Session not found, but escalation instruction recorded."
+        return await asyncio.to_thread(_update)
+
+    @llm.function_tool(description="Reschedule an existing appointment. Provide the appointment ID and the NEW datetime in YYYY-MM-DD HH:MM format.")
+    async def reschedule_appointment(self, appointment_id: int, new_time_str: str) -> str:
+        logger.info(f"Tool call: reschedule_appointment(id={appointment_id}, new_time={new_time_str})")
+        def _query():
+            with SessionLocal() as db:
+                try:
+                    app = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+                    if not app:
+                        return f"Appointment ID {appointment_id} not found."
+                    
+                    if len(new_time_str) == 16:
+                        dt = datetime.strptime(new_time_str, "%Y-%m-%d %H:%M")
+                    else:
+                        dt = datetime.strptime(new_time_str, "%Y-%m-%d %H:%M:%S")
+                    
+                    app.appointment_time = dt
+                    db.commit()
+                    return f"Successfully rescheduled appointment ID {appointment_id} to {new_time_str}."
+                except Exception as e:
+                    return f"Failed to reschedule: {e}. Ensure the time format is YYYY-MM-DD HH:MM."
         return await asyncio.to_thread(_query)
