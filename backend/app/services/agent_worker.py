@@ -39,14 +39,19 @@ async def entrypoint(ctx: JobContext):
         except Exception as e:
             logger.error(f"Dashboard Session Error: {e}")
 
-        def log_transcript(role: str, content: str):
-            if not session_id: return
+        session_id_str = ctx.room.name
+        
+        def log_transcript(role, content):
             def _log():
                 try:
-                    with SessionLocal() as db:
-                        t = Transcript(session_id=session_id, role=role, content=content)
-                        db.add(t)
+                    db = SessionLocal()
+                    # Resolve room name string to DB integer ID
+                    session_record = db.query(CallSession).filter(CallSession.call_id == session_id_str).first()
+                    if session_record:
+                        transcript = Transcript(session_id=session_record.id, role=role, content=content)
+                        db.add(transcript)
                         db.commit()
+                    db.close()
                 except Exception as ex:
                     logger.error(f"Transcript Error: {ex}")
             asyncio.create_task(asyncio.to_thread(_log))
@@ -65,7 +70,7 @@ async def entrypoint(ctx: JobContext):
                 "- Keep responses brief and natural.\n"
                 "- Never expose database IDs."
             ),
-            tools=llm.find_function_tools(EHRTools(session_id=session_id)),
+            tools=llm.find_function_tools(EHRTools(room_name=session_id_str)),
             stt=elevenlabs.STT(),
             llm=anthropic.LLM(model="claude-3-haiku-20240307"),
             tts=elevenlabs.TTS(voice_id="pXr6cxbX2mUgTLejYHov"),

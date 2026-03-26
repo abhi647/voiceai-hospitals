@@ -94,16 +94,16 @@ class EHRTools(llm.ToolContext):
     async def escalate_to_human(self, reason: str) -> str:
         logger.info(f"Tool call: escalate_to_human(reason='{reason}')")
         def _update():
-            if not self.session_id:
-                return "Escalation requested, but no active session found to mark. Telling the user an operator is being notified."
+            if not self.room_name:
+                return "Escalation requested, but no active room name found to mark."
             with SessionLocal() as db:
-                session = db.query(CallSession).filter(CallSession.id == self.session_id).first()
+                session = db.query(CallSession).filter(CallSession.call_id == self.room_name).first()
                 if session:
                     session.status = "escalated"
                     session.urgency_score = 10
                     db.commit()
-                    return "The call has been flagged as 'Escalated' in the system. A human operator has been notified."
-                return "Session not found, but escalation instruction recorded."
+                    return "The call has been flagged as 'Escalated' in the dashboard. A human operator has been notified."
+                return f"Session for room {self.room_name} not found in DB, but escalation instruction recorded."
         return await asyncio.to_thread(_update)
 
     @llm.function_tool(description="Reschedule an existing appointment. Provide the appointment ID and the NEW datetime in YYYY-MM-DD HH:MM format.")
